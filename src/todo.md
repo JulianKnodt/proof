@@ -1,1 +1,2 @@
-Need to add recursive definitions
+Need to allow for equality checks between expressions
+
