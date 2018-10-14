@@ -56,6 +56,7 @@ impl List {
 
 #[derive(Clone)]
 pub struct InfixDefn {
+  name: String,
   left_name: String,
   right_name: String,
   body: Box<Expr>,
@@ -63,6 +64,7 @@ pub struct InfixDefn {
 
 #[derive(Clone)]
 pub struct PrefixDefn {
+  name: String,
   params: Vec<String>,
   body: Box<Expr>,
 }
@@ -167,11 +169,16 @@ impl Expr {
             .expect("No matching branch"),
         _ => panic!("Cannot match against non-literal"),
       },
-      Expr::DefnInfix(InfixDefn{left_name, right_name, body}) =>
-        Expr::Literal(Type::Infix(env.clone(),left_name.to_string(),
-          body.clone(), right_name.to_string())),
-      Expr::DefnPrefix(PrefixDefn{params, body}) =>
-        Expr::Literal(Type::Prefix(env.clone(),params.to_vec(), body.clone())),
+      Expr::DefnInfix(InfixDefn{name, left_name, right_name, body}) => {
+        let body_expr = *body.clone();
+        Expr::Literal(Type::Infix(env_with(env,name,body_expr),left_name.to_string(),
+          body.clone(), right_name.to_string()))
+      },
+      Expr::DefnPrefix(PrefixDefn{name, params, body}) => {
+        let body_expr = *body.clone();
+        Expr::Literal(Type::Prefix(env_with(env,name,body_expr),params.to_vec(),
+        body.clone()))
+      },
     }
   }
 
@@ -186,12 +193,12 @@ impl Expr {
 
 #[test]
 fn test_eval() {
-  let test_val = 3;
-  let expr = Expr::Assign("x".to_string(), Box::new(Expr::Literal(Type::Int(test_val))),
+  let test_int = 3;
+  let expr = Expr::Assign("x".to_string(), Box::new(Expr::Literal(Type::Int(test_int))),
     Box::new(Expr::Variable("x".to_string())));
   if let Expr::Literal(Type::Int(a)) = expr.eval(&Expr::new_env()) {
-    assert_eq!(test_val, a)
+    assert_eq!(test_int, a);
   } else {
-    panic!("Failed")
+    panic!("Failed at variable test")
   }
 }
