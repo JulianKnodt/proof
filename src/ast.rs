@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 #[derive(Clone)]
 pub enum Type {
+  Free(Box<Expr>),
   // Special cases
   Unit,
 
@@ -30,14 +31,11 @@ impl Type {
       Type::Tuple(a, b) =>
         if let Type::Tuple(c, d) = o { a.equals(c) && b.equals(d) } else { false },
       Type::List(a) => if let Type::List(b) = o { a.equals(b) } else { false },
+      Type::Free(a) => if let Type::Free(b) =o { a.equals(b) } else { false },
       _ => false,
     }
   }
-  fn do_match<S, T>(&self, against: Vec<(Self, S, T)>) -> Option<(Self, S, T)> {
-    against.into_iter().find(|(x,_,_)| x.equals(self))
-  }
 }
-
 
 #[derive(Clone)]
 pub enum List {
@@ -58,19 +56,15 @@ impl List {
 
 #[derive(Clone)]
 pub struct InfixDefn {
-  name: String,
   left_name: String,
   right_name: String,
   body: Box<Expr>,
-  next: Box<Expr>,
 }
 
 #[derive(Clone)]
 pub struct PrefixDefn {
-  name: String,
   params: Vec<String>,
   body: Box<Expr>,
-  next: Box<Expr>,
 }
 
 #[derive(Clone)]
@@ -109,7 +103,6 @@ impl MatchPatterns {
 // TODO optimize by moving fields to structs, so can reduce size of enums.
 #[derive(Clone)]
 pub enum Expr {
-  Free(String),
   Literal(Type),
   Variable(String),
   DefnInfix(InfixDefn), // define 1st as infix of 2nd in Exp
@@ -135,10 +128,9 @@ impl Expr {
   pub fn eval<'a>(&'a self, env: &Env) -> Expr {
     match self {
       Expr::Literal(x) => Expr::Literal(x.clone()),
-      Expr::Free(name)  => Expr::Free(name.to_string()),
       Expr::Variable(name) => match env.get(name) {
         Some(sub_expr) => sub_expr.eval(env),
-        None => Expr::Free(name.to_string()),
+        None => Expr::Literal(Type::Free(Box::new(Expr::Variable(name.to_string())))),
       },
       Expr::Assign(name, value, rest) => rest.eval(&env_with(env, &name, value.eval(env))),
       Expr::PrefixCall(func, args) => {
@@ -175,18 +167,31 @@ impl Expr {
             .expect("No matching branch"),
         _ => panic!("Cannot match against non-literal"),
       },
-      Expr::DefnInfix(InfixDefn{name, left_name, right_name, body, next}) =>
-        next.eval(&env_with(env, name,
-          Expr::Literal(Type::Infix(env.clone(), left_name.to_string(),
-          body.clone(), right_name.to_string())))),
-      Expr::DefnPrefix(PrefixDefn{name, params, body, next}) =>
-        next.eval(&env_with(env, name, Expr::Literal(Type::Prefix(env.clone(),
-        params.to_vec(), body.clone())))),
+      Expr::DefnInfix(InfixDefn{left_name, right_name, body}) =>
+        Expr::Literal(Type::Infix(env.clone(),left_name.to_string(),
+          body.clone(), right_name.to_string())),
+      Expr::DefnPrefix(PrefixDefn{params, body}) =>
+        Expr::Literal(Type::Prefix(env.clone(),params.to_vec(), body.clone())),
     }
+  }
+
+  pub fn equals(&self, o: &Self) -> bool {
+    unimplemented!()
+  }
+
+  pub fn new_env() -> Env {
+    HashMap::new()
   }
 }
 
 #[test]
 fn test_eval() {
-
+  let test_val = 3;
+  let expr = Expr::Assign("x".to_string(), Box::new(Expr::Literal(Type::Int(test_val))),
+    Box::new(Expr::Variable("x".to_string())));
+  if let Expr::Literal(Type::Int(a)) = expr.eval(&Expr::new_env()) {
+    assert_eq!(test_val, a)
+  } else {
+    panic!("Failed")
+  }
 }
