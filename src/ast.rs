@@ -12,8 +12,8 @@ pub enum Type {
   Str(String),
   Tuple(Box<Type>, Box<Type>),
 
-  Infix(Env, String, Box<Expr>, String), //left name fn body right name
-  Prefix(Env, Vec<String>, Box<Expr>), //Name in body
+  Infix(Env, String, String, Box<Expr>, String), //left name fn body right name
+  Prefix(Env, String, Vec<String>, Box<Expr>), //Name in body
 
   List(Box<List>),
 
@@ -136,22 +136,26 @@ impl Expr {
       },
       Expr::Assign(name, value, rest) => rest.eval(&env_with(env, &name, value.eval(env))),
       Expr::PrefixCall(func, args) => {
-        match func.eval(env) {
-          Expr::Literal(Type::Prefix(clos, arg_names, body)) =>
+        let prefix = func.eval(env);
+        match prefix.clone() {
+          Expr::Literal(Type::Prefix(clos,name,arg_names, body)) =>
             body.eval(&args
               .iter()
               .map(|it| it.eval(env))
               .enumerate()
-              .fold(clos, |acc, (i, arg)| env_with(&acc, &arg_names[i], arg))),
+              .fold(env_with(&clos, &name, prefix),
+                |acc, (i, arg)| env_with(&acc, &arg_names[i], arg))),
           _ => panic!("Cannot apply non-prefix func"),
         }
       },
       Expr::InfixCall(l, oper, r) => {
-        match oper.eval(env) {
-          Expr::Literal(Type::Infix(clos, l_name, body, r_name)) => {
+        let infix = oper.eval(env);
+        match infix.clone() {
+          Expr::Literal(Type::Infix(clos,name,l_name, body, r_name)) => {
             let l_val = l.eval(env);
             let r_val = r.eval(env);
-            body.eval(&env_with(&env_with(&clos, &l_name, l_val), &r_name, r_val))
+            let with_self = env_with(&clos,&name,infix);
+            body.eval(&env_with(&env_with(&with_self, &l_name, l_val), &r_name, r_val))
           },
           _ => panic!("Cannot apply non-infix func as infix operator"),
         }
@@ -170,14 +174,11 @@ impl Expr {
         _ => panic!("Cannot match against non-literal"),
       },
       Expr::DefnInfix(InfixDefn{name, left_name, right_name, body}) => {
-        let body_expr = *body.clone();
-        Expr::Literal(Type::Infix(env_with(env,name,body_expr),left_name.to_string(),
+        Expr::Literal(Type::Infix(env.clone(),name.to_string(),left_name.to_string(),
           body.clone(), right_name.to_string()))
       },
       Expr::DefnPrefix(PrefixDefn{name, params, body}) => {
-        let body_expr = *body.clone();
-        Expr::Literal(Type::Prefix(env_with(env,name,body_expr),params.to_vec(),
-        body.clone()))
+        Expr::Literal(Type::Prefix(env.clone(),name.to_string(),params.to_vec(), body.clone()))
       },
     }
   }
