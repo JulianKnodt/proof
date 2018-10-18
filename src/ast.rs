@@ -64,9 +64,9 @@ pub struct InfixDefn {
 
 #[derive(Clone)]
 pub struct PrefixDefn {
-  name: String,
-  params: Vec<String>,
-  body: Box<Expr>,
+  pub name: String,
+  pub params: Vec<String>,
+  pub body: Box<Expr>,
 }
 
 #[derive(Clone)]
