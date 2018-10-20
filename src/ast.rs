@@ -1,4 +1,12 @@
 use std::collections::HashMap;
+use std::fmt;
+use std::sync::Arc;
+
+#[derive(Debug, Clone)]
+pub enum ParamType {
+  Singular(String),
+  Rest(String),
+}
 
 #[derive(Clone)]
 pub enum Type {
@@ -10,66 +18,53 @@ pub enum Type {
   Float(f32),
   Bool(bool),
   Str(String),
-  Tuple(Box<Type>, Box<Type>),
+  Tuple(Arc<Type>, Arc<Type>),
 
-  Infix(Env, String, String, Box<Expr>, String), //left name fn body right name
-  Prefix(Env, String, Vec<String>, Box<Expr>), //Name in body
+  Closure(Env, Defn),
 
-  List(Box<List>),
+  List(Arc<List>),
 
-  // implement enums here TODO
+  // This is for implementing primitives like add
+  RustClosure(&'static Fn(Vec<Type>) -> Type),
 }
 
-impl Type {
-  fn equals(&self, o: &Self) -> bool {
+impl fmt::Debug for Type {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     match self {
-      Type::Unit => if let Type::Unit = o { true } else { false },
-      Type::Int(a) => if let Type::Int(b) = o { a == b } else { false },
-      Type::Float(a) => if let Type::Float(b) = o { a == b } else { false },
-      Type::Bool(a) => if let Type::Bool(b) = o { a == b } else { false },
-      Type::Str(a) => if let Type::Str(b) = o { a == b } else { false },
-      Type::Tuple(a, b) =>
-        if let Type::Tuple(c, d) = o { a.equals(c) && b.equals(d) } else { false },
-      Type::List(a) => if let Type::List(b) = o { a.equals(b) } else { false },
-      Type::Free(a) => if let Type::Free(b) =o { a.equals(b) } else { false },
-      _ => false,
+      Type::Int(i) => write!(f, "{}", i),
+      Type::Float(i) => write!(f, "{}", i),
+      Type::Bool(v) => write!(f, "{}", v),
+      Type::Unit => write!(f, "()"),
+      Type::Free(expr) => write!(f, "{:?}", expr),
+      Type::Str(string) => write!(f, "{}", string),
+      Type::RustClosure(_) => write!(f, "Anonymous Closure"),
+      _ => write!(f, "TODO Lol"),
     }
   }
 }
 
-#[derive(Clone)]
+
+#[derive(Clone, Debug)]
 pub enum List {
   End,
-  Cons(Type, Box<List>),
+  Cons(Type, Arc<List>),
 }
 
-impl List {
-  fn equals(&self, o: &Self) -> bool {
-    match self {
-      List::End => if let List::End = o { true } else { false },
-      List::Cons(hd, tl) => if let List::Cons(h2, t2) = o {
-        hd.equals(h2) && tl.equals(t2)
-      } else { false },
-    }
-  }
-}
 
-#[derive(Clone)]
-pub struct InfixDefn {
-  name: String,
-  left_name: String,
-  right_name: String,
-  body: Box<Expr>,
-}
-
-#[derive(Clone)]
-pub struct PrefixDefn {
+#[derive(Clone, Debug)]
+pub struct Defn {
   pub name: String,
-  pub params: Vec<String>,
-  pub body: Box<Expr>,
+  pub params: Vec<ParamType>, // the name which the list of arguments will be bound to
+  pub body: Box<Expr>
 }
 
-#[derive(Clone)]
+//impl fmt::Debug for Defn {
+//  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+//    write!(f, "Fn({})", self.name)
+//  }
+//}
+
+#[derive(Clone, Debug)]
 pub enum MatchPatterns {
   Cons(String, String),
   EmptyList,
@@ -103,18 +98,17 @@ impl MatchPatterns {
 }
 
 // TODO optimize by moving fields to structs, so can reduce size of enums.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Expr {
   Literal(Type),
   Variable(String),
-  DefnInfix(InfixDefn), // define 1st as infix of 2nd in Exp
-  DefnPrefix(PrefixDefn), // define 1st as prefix of 2nd in Exp
-  InfixCall(Box<Expr>, Box<Expr>, Box<Expr>), // call infix(2nd) on 1st and 3rd
-  PrefixCall(Box<Expr>, Vec<Expr>), // call 1st on rest of Expressions
+  Defn(Defn), // define 1st as prefix of 2nd in Exp
+  Call(Box<Expr>, Vec<Expr>), // call 1st on rest of Expressions
   Assign(String, Box<Expr>, Box<Expr>), // assign to name value of 1st expression in 2nd
   Match(Box<Expr>, Vec<(MatchPatterns, Expr)>), // compare value of 1st expr to each of 2nd
 }
 
+// TODO turn this into an Arc instead of an Expr
 type Env = HashMap<String, Expr>;
 
 pub fn env_with<'a>(env: &Env, name: &String, value: Expr) -> Env {
@@ -135,29 +129,23 @@ impl Expr {
         None => Expr::Literal(Type::Free(Box::new(Expr::Variable(name.to_string())))),
       },
       Expr::Assign(name, value, rest) => rest.eval(&env_with(env, &name, value.eval(env))),
-      Expr::PrefixCall(func, args) => {
+      Expr::Call(func, args) => {
         let prefix = func.eval(env);
         match prefix.clone() {
-          Expr::Literal(Type::Prefix(clos,name,arg_names, body)) =>
-            body.eval(&args
-              .iter()
-              .map(|it| it.eval(env))
-              .enumerate()
-              .fold(env_with(&clos, &name, prefix),
-                |acc, (i, arg)| env_with(&acc, &arg_names[i], arg))),
-          _ => panic!("Cannot apply non-prefix func"),
-        }
-      },
-      Expr::InfixCall(l, oper, r) => {
-        let infix = oper.eval(env);
-        match infix.clone() {
-          Expr::Literal(Type::Infix(clos,name,l_name, body, r_name)) => {
-            let l_val = l.eval(env);
-            let r_val = r.eval(env);
-            let with_self = env_with(&clos,&name,infix);
-            body.eval(&env_with(&env_with(&with_self, &l_name, l_val), &r_name, r_val))
+          Expr::Literal(Type::Closure(clos,Defn{name, params, body})) => {
+            let mut arg_iter = args.iter();
+            params.iter().fold(&env, |acc, param| match param {
+              ParamType::Singular(name) => {
+                let next_arg = arg_iter.next().expect("Not enough arguments supplied to {}",
+                  name);
+                env_with(acc, name, next_arg.eval(env))
+              },
+              ParamType::Rest(rest_name) => {
+                env_with(acc, rest_name, arg_iter.fold(List::End, |acc, n| List::Cons(n, acc)))
+              },
+            }
           },
-          _ => panic!("Cannot apply non-infix func as infix operator"),
+          non_func => panic!("Cannot apply non-prefix func {:?}", non_func),
         }
       },
       Expr::Match(against, branches) => match against.eval(env) {
@@ -173,18 +161,8 @@ impl Expr {
             .expect("No matching branch"),
         _ => panic!("Cannot match against non-literal"),
       },
-      Expr::DefnInfix(InfixDefn{name, left_name, right_name, body}) => {
-        Expr::Literal(Type::Infix(env.clone(),name.to_string(),left_name.to_string(),
-          body.clone(), right_name.to_string()))
-      },
-      Expr::DefnPrefix(PrefixDefn{name, params, body}) => {
-        Expr::Literal(Type::Prefix(env.clone(),name.to_string(),params.to_vec(), body.clone()))
-      },
+      Expr::Defn(defn) => Expr::Literal(Type::Closure(env.clone(), defn)),
     }
-  }
-
-  pub fn equals(&self, o: &Self) -> bool {
-    unimplemented!()
   }
 
   pub fn new_env() -> Env {
@@ -203,3 +181,4 @@ fn test_eval() {
     panic!("Failed at variable test")
   }
 }
+

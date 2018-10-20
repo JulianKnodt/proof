@@ -1,5 +1,6 @@
 use lisp_parse::{Token};
-use ast::{Expr, Type, PrefixDefn};
+use ast::{Expr, Type, Defn};
+use std::sync::Arc;
 
 impl Token {
   pub fn to_ast(&self) -> Expr {
@@ -23,11 +24,11 @@ impl Token {
             "let" => construct_let(operands).expect("Invalid let statement"),
             "defn" => construct_defn_prefix(operands).expect("Invalid defn statement"),
             "match" => unimplemented!("Will implement match later whatever"),
-            e => Expr::PrefixCall(Box::new(Expr::Variable(e.to_string())), operands),
+            e => Expr::Call(Box::new(Expr::Variable(e.to_string())), operands),
           }
         } else {
           let operands = tokens.iter().skip(1).map(|op| op.to_ast()).collect();
-          Expr::PrefixCall(Box::new(tokens[0].to_ast()), operands)
+          Expr::Call(Box::new(tokens[0].to_ast()), operands)
         },
       }
     }
@@ -63,9 +64,9 @@ fn construct_defn_prefix(mut operands: Vec<Expr>) -> Option<Expr> {
     }
   }
   if let Expr::Variable(ref name) = operands[0] {
-    return Some(Expr::DefnPrefix(PrefixDefn{
+    return Some(Expr::Defn(Defn{
       name: name.to_string(),
-      params: params,
+      params: params.to_vec(),
       body,
     }))
   }
