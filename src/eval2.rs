@@ -12,6 +12,7 @@ impl fmt::Debug for RustClosureFn {
 
 #[derive(Debug, Clone)]
 pub enum Type {
+  Unit,
   Free(Arc<Expr>),
   Number(f32),
   Str(String),
@@ -28,7 +29,13 @@ pub enum Type {
 #[derive(Debug, Clone)]
 pub enum List {
   End,
-  Cons(Type, Arc<List>),
+  Cons(Arc<Type>, Arc<List>),
+}
+
+#[derive(Debug, Clone)]
+pub enum ParamType {
+  Singular(String),
+  Rest(String),
 }
 
 #[derive(Debug, Clone)]
@@ -38,19 +45,12 @@ pub struct Defn {
   pub body: Arc<Expr>,
 }
 
-// Represents the parameter passed into the function
-#[derive(Debug, Clone)]
-pub enum ParamType {
-  Sing(String),
-  Rest(String),
-}
-
 #[derive(Debug, Clone)]
 pub enum Expr {
   Value(Arc<Type>),
   Variable(String),
   Defn(Arc<Defn>),
-  Call(Arc<Expr>, Arc<Expr>),
+  Call(Arc<Expr>, Vec<Arc<Expr>>),
   Assign(String, Arc<Expr>, Arc<Expr>),
   If(Arc<Expr>, Arc<Expr>, Arc<Expr>),
 }
@@ -76,6 +76,12 @@ impl Env {
 }
 
 impl Expr {
+  fn to_type(&self) -> Arc<Type> {
+    match self {
+      Expr::Value(v) => Arc::clone(v),
+      _ => panic!("Not a type"),
+    }
+  }
   pub fn eval(&self, env: Arc<Option<Env>>) -> Arc<Expr> {
     match self {
       Expr::Value(v) => Arc::new(Expr::Value(Arc::clone(v))),
@@ -97,7 +103,21 @@ impl Expr {
       },
       Expr::Call(operator, operands) => match operator.eval(Arc::clone(&env)).deref() {
         Expr::Value(inner) => if let Type::Closure(clos_env, defn) = inner.borrow() {
-          defn.body.eval(Env::with(env, defn.name.to_string(), Arc::clone(&defn.body)))
+          let fn_env = Env::with(Arc::clone(clos_env), defn.name.to_string(),
+            Arc::clone(&defn.body));
+          let args = &mut operands.iter().map(|n| n.eval(Arc::clone(&env)));
+
+          let fn_env = defn.params.iter().fold(fn_env, move |e,p| match p {
+            ParamType::Singular(name) =>
+              Env::with(e, name.to_string(), Arc::clone(&args.next()
+                .expect("Not enough args passed to function"))),
+
+            ParamType::Rest(name) => Env::with(e, name.to_string(),
+              Arc::new(Expr::Value(Arc::new(Type::List(args.fold(Arc::new(List::End), |r,n|
+                Arc::new(List::Cons(n.to_type(),Arc::clone(&r))))))))),
+          });
+
+          defn.body.eval(fn_env)
         } else {
           panic!("Cannot invoke non-function")
         },
@@ -116,3 +136,4 @@ fn test_basic() {
   let out = expr.eval(Arc::new(None));
   println!("{:?}", out);
 }
+
