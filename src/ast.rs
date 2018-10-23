@@ -1,14 +1,9 @@
 use std::sync::Arc;
-use std::fmt;
 use std::ops::Deref;
 use std::borrow::Borrow;
 
-type RustClosureFn = &'static Fn(Vec<Type>) -> Type;
-impl fmt::Debug for RustClosureFn {
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    write!(f, "Rust Closure")
-  }
-}
+// A closure function to implement primitives like +
+type RustClosureFn = fn(Vec<Arc<Type>>) -> Type;
 
 #[derive(Debug, Clone)]
 pub enum Type {
@@ -23,7 +18,7 @@ pub enum Type {
 
   List(Arc<List>),
 
-  RustClosure(RustClosureFn),
+  RustClosure(Arc<RustClosureFn>),
 }
 
 #[derive(Debug, Clone)]
@@ -63,7 +58,7 @@ pub struct Env {
 }
 
 impl Env {
-  fn with(old: Arc<Option<Env>>, name: String, bind: Arc<Expr>) -> Arc<Option<Env>> {
+  pub fn with(old: Arc<Option<Env>>, name: String, bind: Arc<Expr>) -> Arc<Option<Env>> {
     Arc::new(Some(Env{name, bind, old}))
   }
   fn lookup(env: Arc<Option<Env>>, name: String) -> Option<Arc<Expr>> {
@@ -102,24 +97,27 @@ impl Expr {
         _ => fallback.eval(env),
       },
       Expr::Call(operator, operands) => match operator.eval(Arc::clone(&env)).deref() {
-        Expr::Value(inner) => if let Type::Closure(clos_env, defn) = inner.borrow() {
-          let fn_env = Env::with(Arc::clone(clos_env), defn.name.to_string(),
-            Arc::clone(&defn.body));
-          let args = &mut operands.iter().map(|n| n.eval(Arc::clone(&env)));
+        Expr::Value(inner) => match inner.borrow() {
+          Type::Closure(clos_env, defn) => {
+            let fn_env = Env::with(Arc::clone(clos_env), defn.name.to_string(),
+              Arc::clone(&defn.body));
+            let args = &mut operands.iter().map(|n| n.eval(Arc::clone(&env)));
 
-          let fn_env = defn.params.iter().fold(fn_env, move |e,p| match p {
-            ParamType::Singular(name) =>
-              Env::with(e, name.to_string(), Arc::clone(&args.next()
-                .expect("Not enough args passed to function"))),
+            let fn_env = defn.params.iter().fold(fn_env, move |e,p| match p {
+              ParamType::Singular(name) =>
+                Env::with(e, name.to_string(), Arc::clone(&args.next()
+                  .expect("Not enough args passed to function"))),
 
-            ParamType::Rest(name) => Env::with(e, name.to_string(),
-              Arc::new(Expr::Value(Arc::new(Type::List(args.fold(Arc::new(List::End), |r,n|
-                Arc::new(List::Cons(n.to_type(),Arc::clone(&r))))))))),
-          });
+              ParamType::Rest(name) => Env::with(e, name.to_string(),
+                Arc::new(Expr::Value(Arc::new(Type::List(args.fold(Arc::new(List::End), |r,n|
+                  Arc::new(List::Cons(n.to_type(),Arc::clone(&r))))))))),
+            });
 
-          defn.body.eval(fn_env)
-        } else {
-          panic!("Cannot invoke non-function")
+            defn.body.eval(fn_env)
+          },
+          Type::RustClosure(func) => Arc::new(Expr::Value(Arc::new(func(operands.iter()
+            .map(|it| it.eval(Arc::clone(&env)).to_type()).collect())))),
+          _ => panic!("Cannot invoke non-function")
         },
         _ => panic!("Cannot invoke non-function"),
       },
@@ -136,4 +134,5 @@ fn test_basic() {
   let out = expr.eval(Arc::new(None));
   println!("{:?}", out);
 }
+
 

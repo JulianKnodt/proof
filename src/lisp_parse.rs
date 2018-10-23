@@ -45,7 +45,10 @@ pub fn parse(body: String) -> Token {
   if buf.len() > 1 {
     panic!("Unmatched left parens");
   }
-  buf.pop().unwrap()
+  match buf.pop().unwrap() {
+    Token::Word(_) => panic!("Expected first elem to be group"),
+    Token::Group(mut tg) => tg.pop().unwrap(),
+  }
 }
 
 #[test]
