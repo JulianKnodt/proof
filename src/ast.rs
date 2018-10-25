@@ -21,6 +21,24 @@ pub enum Type {
   RustClosure(Arc<RustClosureFn>),
 }
 
+impl Type {
+  pub fn new_empty_list() -> Arc<Type> {
+    Arc::new(Type::List(Arc::new(List::End)))
+  }
+  pub fn new_number(n: f32) -> Arc<Type> {
+    Arc::new(Type::Number(n))
+  }
+  pub fn unit() -> Arc<Type> {
+    Arc::new(Type::Unit)
+  }
+  pub fn new_rust_closure(r: RustClosureFn) -> Arc<Type> {
+    Arc::new(Type::RustClosure(Arc::new(r)))
+  }
+  pub fn cons(a: &Arc<Type>, b: &Arc<List>) -> Arc<List> {
+    Arc::new(List::Cons(Arc::clone(a), Arc::clone(b)))
+  }
+}
+
 #[derive(Debug, Clone)]
 pub enum List {
   End,
