@@ -4,7 +4,7 @@ use std::borrow::Borrow;
 use std::collections::HashMap;
 
 // A closure function to implement primitives like +
-type RustClosureFn = fn(Vec<Arc<Type>>) -> Type;
+type RustClosureFn = fn(Vec<Arc<Type>>) -> Arc<Type>;
 
 #[derive(Debug, Clone)]
 pub enum Type {
@@ -153,8 +153,8 @@ impl Expr {
 
             defn.body.eval(fn_env, g_env)
           },
-          Type::RustClosure(func) => Arc::new(Expr::Value(Arc::new(func(operands.iter()
-            .map(|it| it.eval(Arc::clone(&env), g_env).to_type()).collect())))),
+          Type::RustClosure(func) => Arc::new(Expr::Value(func(operands.iter()
+            .map(|it| it.eval(Arc::clone(&env), g_env).to_type()).collect()))),
           _ => panic!("Cannot invoke non-function")
         },
         _ => panic!("Cannot invoke non-function"),
