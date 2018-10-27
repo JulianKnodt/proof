@@ -16,9 +16,10 @@ impl Token {
   }
 }
 
-pub fn parse(body: String) -> Token {
+pub fn parse(body: String) -> Vec<Token> {
   let to_parse = body.trim();
-  let mut buf: Vec<Token> = vec!(Token::init_group());
+  let mut done: Vec<Token> = Vec::new();
+  let mut buf: Vec<Token> = Vec::new();
   let mut curr = String::from("");
   for c in to_parse.chars() {
     match c {
@@ -30,25 +31,38 @@ pub fn parse(body: String) -> Token {
           curr = String::from("");
         }
         let completed = buf.pop().expect("Extra right parens");
-        let len = buf.len() - 1;
-        buf.get_mut(len).expect("Extra right parens").add_next(completed);
+        if buf.is_empty() {
+          done.push(completed)
+        } else {
+          let len = buf.len() - 1;
+          buf.get_mut(len).expect("Extra right parens").add_next(completed);
+        }
       },
       s if s.is_whitespace() && curr.len() == 0 => (),
       s if s.is_whitespace() => {
-        let len = buf.len() - 1;
-        buf[len].add_next(Token::Word(curr.clone()));
+        if buf.is_empty() {
+          done.push(Token::Word(curr.clone()));
+        } else {
+          let len = buf.len() - 1;
+          buf[len].add_next(Token::Word(curr.clone()));
+        }
         curr = String::from("");
       },
       x => curr.push(x),
     }
   };
-  if buf.len() > 1 {
+  if curr.len() > 0 {
+    // Should only happen in the case where the line is just a single token
+    done.push(Token::Word(curr.clone()));
+  }
+  if buf.len() > 0 {
     panic!("Unmatched left parens");
   }
-  match buf.pop().unwrap() {
-    Token::Word(_) => panic!("Expected first elem to be group"),
-    Token::Group(mut tg) => tg.pop().unwrap(),
+  match buf.pop() {
+    None => (),
+    Some(group) => done.push(group),
   }
+  done
 }
 
 #[test]

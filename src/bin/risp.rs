@@ -7,13 +7,19 @@ fn main() {
   // then evaluate
 //  println!("{:?}", proof::lisp_parse::parse(buffer).to_ast().eval(proof::ast::Env::default()));
   let mut buffer = String::new();
+  let mut global_env = proof::ast::Env::default_global();
   loop {
     print!(">> ");
     stdout().flush().expect("Could not flush to stdout, strange.");
     match io::stdin().read_line(&mut buffer) {
+      Ok(0) => break,
       Ok(_) => if has_matching_parens(&buffer) {
-        println!("{:?}",
-        proof::lisp_parse::parse(buffer).to_ast().eval(proof::ast::Env::default()));
+        proof::lisp_parse::parse(buffer)
+          .iter()
+          .for_each(|tokenized| {
+            print!("= {:?}",
+              tokenized.to_ast().eval(proof::ast::Env::default(), &mut global_env));
+          });
         buffer = String::new();
       },
       Err(e) => {
@@ -21,8 +27,9 @@ fn main() {
         break;
       },
     }
+    println!("");
   }
-  println!("Fac ut vivas!");
+  println!("\nFac ut vivas!");
 }
 
 // this was my google internship question today lol

@@ -1,5 +1,5 @@
 use lisp_parse::{Token};
-use ast::{Expr, Type, Defn, ParamType};
+use ast::{Expr, Type, Defn, ParamType, Assign};
 use std::sync::Arc;
 
 impl Token {
@@ -9,6 +9,8 @@ impl Token {
       Token::Word(s) => match &s[..] {
         "let" | "defn" | "if" => panic!("Reserved keyword used"),
         "[]" => Expr::Value(Type::new_empty_list()),
+        "t" => Expr::Value(Arc::new(Type::Bool(true))),
+        "f" => Expr::Value(Arc::new(Type::Bool(false))),
         s if s.parse::<f32>().is_ok() =>
           Expr::Value(Type::new_number(s.parse::<f32>().unwrap())),
         s if s.starts_with("\"") && s.ends_with("\"") =>
@@ -22,11 +24,15 @@ impl Token {
             4 => {
               let bound_to = if let Some(Token::Word(s)) = g.get(1) { s }
                 else { panic!("Must assign to name") };
-              Expr::Assign(bound_to.to_string(), Arc::new(g[2].to_ast()), Arc::new(g[3].to_ast()))
+              let a = Assign::Local(bound_to.to_string(), Arc::new(g[2].to_ast()),
+                Arc::new(g[3].to_ast()));
+              Expr::Assign(a)
             },
             3 => {
-              // TODO global let
-              unimplemented!()
+              let bound_to = if let Some(Token::Word(s)) = g.get(1) { s }
+                else { panic!("Must assign to name") };
+              let a = Assign::Global(bound_to.to_string(), Arc::new(g[2].to_ast()));
+              Expr::Assign(a)
             },
             _ => panic!("Invalid let statement, must have 2-3 operands"),
           },
@@ -44,14 +50,14 @@ impl Token {
               body,
             }))
           },
-          "if" => Expr::If(Arc::new(g[0].to_ast()),
-          Arc::new(g[1].to_ast()), Arc::new(g[2].to_ast())),
+          "if" => Expr::If(Arc::new(g[1].to_ast()),
+          Arc::new(g[2].to_ast()), Arc::new(g[3].to_ast())),
           func => Expr::Call(Arc::new(Expr::Variable(func.to_string())), g.iter().skip(1)
             .map(|it| Arc::new(it.to_ast())).collect())
         }
       } else {
-        // the case where the first element is a group
-        unimplemented!();
+        Expr::Call(Arc::new(g[0].to_ast()), g.iter().skip(1).map(|it|
+          Arc::new(it.to_ast())).collect())
       }
     }
   }

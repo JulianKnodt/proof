@@ -1,6 +1,7 @@
-use ast::{Env, Type, Expr};
+use ast::{Env, Type, Expr, GlobalEnv};
 use std::sync::Arc;
 use std::borrow::Borrow;
+use std::collections::HashMap;
 
 impl Env {
   pub fn default() -> Arc<Option<Env>> {
@@ -27,6 +28,39 @@ impl Env {
       Type::new_rust_closure(|x: Vec<Arc<Type>>| {
       x.iter().for_each(|item| println!(":?{:?}", item));
       Type::Unit
+    }))));
+    e
+  }
+  pub fn default_global() -> GlobalEnv {
+    let mut e = HashMap::new();
+    e.insert(String::from("-"), Arc::new(Expr::Value(
+      Type::new_rust_closure(|x: Vec<Arc<Type>>| {
+        let mut items = x.iter();
+        let first = items.next()
+          .expect("Missing arguments, usage: (- [from: Number] [...values: Number])");
+        if let Type::Number(n) = first.borrow() {
+          Type::Number(items.fold(*n, |acc, v| match v.borrow() {
+            Type::Number(num) => acc - num,
+            _ => panic!("Cannot sub values which aren't numbers"),
+          }))
+        } else {
+          panic!("First element must be of type number");
+        }
+      }
+    ))));
+
+    e.insert(String::from("*"), Arc::new(Expr::Value(
+      Type::new_rust_closure(|x|
+        Type::Number(x.iter().fold(1.0, |acc, elem| match elem.borrow() {
+          Type::Number(n) => acc * n,
+          _ => panic!("Cannot multiply by non-number"),
+    }))))));
+
+    e.insert(String::from("="), Arc::new(Expr::Value(
+      Type::new_rust_closure(|x| {
+        let mut items = x.iter();
+        let first = items.next().expect("Missing arguments, usage: (= [comp] [... to])");
+        Type::Bool(items.all(|i| i.equals(first)))
     }))));
     e
   }
