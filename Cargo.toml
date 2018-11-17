@@ -4,4 +4,17 @@ version = "0.1.0"
 authors = ["julianknodt <julianknodt@gmail.com>"]
 
 [dependencies]
+csv = "1"
 
+[[bin]]
+name = "interpreter"
+path = "src/bin/interpreter.rs"
+
+[[bin]]
+name = "compiler"
+path = "src/bin/compiler.rs"
+
+[[bin]]
+name = "runtime_test"
+path = "src/bin/compile/runtime.rs"
+rustflags = ["-l test.o", "-L .", "-L ../../"]

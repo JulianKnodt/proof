@@ -1,3 +1,4 @@
 # Proof
 
-A basic proof writer written in rust.
+A lisp interpreter written in rust.
+It allows for math and list comprehension.
