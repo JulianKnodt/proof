@@ -166,10 +166,10 @@ impl Expr {
 #[test]
 fn test_basic() {
   let test_num = 3.0;
-  let expr = Expr::Assign(String::from("x"),
+  let expr = Expr::Assign(Assign::Local(String::from("x"),
     Arc::new(Expr::Value(Arc::new(Type::Number(test_num)))),
-    Arc::new(Expr::Variable(String::from("x"))));
-  let out = expr.eval(Arc::new(None), HashMap::new());
+    Arc::new(Expr::Variable(String::from("x")))));
+  let out = expr.eval(Arc::new(None), &mut HashMap::new());
   println!("{:?}", out);
 }
 

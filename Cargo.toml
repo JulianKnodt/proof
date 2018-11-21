@@ -14,7 +14,3 @@ path = "src/bin/interpreter.rs"
 name = "compiler"
 path = "src/bin/compiler.rs"
 
-[[bin]]
-name = "runtime_test"
-path = "src/bin/compile/runtime.rs"
-rustflags = ["-l test.o", "-L .", "-L ../../"]

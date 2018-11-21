@@ -5,6 +5,9 @@ pub enum Token {
 }
 
 impl Token {
+  pub fn from(s: &str) -> Token {
+    Token::Word(String::from(s))
+  }
   fn add_next(&mut self, next: Token) {
     match self {
       Token::Word(_) => panic!("Cannot add next to singleton"),

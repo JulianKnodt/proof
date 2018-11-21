@@ -8,7 +8,7 @@ use proof::compile::compile::compile;
 
 fn main() {
   let mut out = io::stdout();
-  env::args().for_each(|arg| {
+  env::args().skip(1).for_each(|arg| {
     let mut file = File::open(arg).expect("File could not be opened");
     let mut contents = String::new();
     file.read_to_string(&mut contents).expect("File could not be read");

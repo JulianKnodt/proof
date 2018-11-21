@@ -4,3 +4,6 @@ Cargo.lock
 
 *.swp
 *.o
+a.out
+temp_test.s
+*.swo
