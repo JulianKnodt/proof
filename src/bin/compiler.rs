@@ -13,7 +13,7 @@ fn main() {
     let mut contents = String::new();
     file.read_to_string(&mut contents).expect("File could not be read");
     let parts = proof::lisp_parse::parse(contents);
-    compile(parts.into_iter().next().unwrap(), &mut out).expect("Could not compile");
+    compile(parts.iter().next().unwrap(), &mut out).expect("Could not compile");
   });
 }
 

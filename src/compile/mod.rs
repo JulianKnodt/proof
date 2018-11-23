@@ -22,14 +22,24 @@ mod tests {
     )
   }
 
-  fn run_on(cases: Vec<(Token, &'static str)>) {
-    let errors: Vec<String> = cases.into_iter().filter_map(|(input, expected)| {
-      let mut file = File::create("temp_test.s").expect("Cannot open temp file");
-      compile::compile(input, &mut file).expect("Could not compile");
+  fn one_arg_test_cases() -> Vec<(Token, &'static str)> {
+    vec!(
+      (Token::Group(vec!(Token::from("fxadd1"), Token::from("1"))), "2"),
+    )
+  }
+
+  fn run_on(cases: Vec<(Token, &'static str)>, name: &'static str) {
+    let errors: Vec<String> = cases.into_iter().enumerate().filter_map(|(i, (input, expected))| {
+      let filename = format!("tmp{}_{}t{}.s", name, i, expected);
+      let mut file = File::create(&filename).expect("Cannot open temp file");
+      compile::compile(&input, &mut file).expect("Could not compile");
+      let newfile = format!("exe_{}_{}", name, i);
       let comp_out = Command::new("gcc")
         .arg(format!("{}/runtime_test/runtime.c",
         Path::new(file!()).parent().unwrap().to_str().unwrap()))
-        .arg("./temp_test.s")
+        .arg(filename)
+        .arg("-o")
+        .arg(&newfile)
         .output()
         .expect("Failed to compile test");
       if let Ok(err) = str::from_utf8(&comp_out.stderr) {
@@ -38,7 +48,7 @@ mod tests {
         }
       };
 
-      let result = Command::new("./a.out").output().unwrap();
+      let result = Command::new(format!("./{}",newfile)).output().expect("Could not run");
       if let Ok(err) = str::from_utf8(&result.stderr) {
         if err != "" {
           return Some(String::from(err))
@@ -63,7 +73,8 @@ mod tests {
 
   #[test]
   fn run_tests() {
-    run_on(basic_test_cases());
+    run_on(basic_test_cases(), "basic");
+    run_on(one_arg_test_cases(), "one_arg");
     // run_on(...)
   }
 }
