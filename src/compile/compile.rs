@@ -6,14 +6,24 @@ use lisp_parse::Token;
 use std::collections::HashMap;
 
 mod builtins {
+  macro_rules! builtin_fn {
+    ($builtin_name: ident, $content: tt) => (
+      pub fn $builtin_name(w: &mut Write) -> io::Result<()> {
+        write!(w, $content)
+      }
+    );
+
+    ($builtin_name: ident, $content: tt, $($format_args:expr),*) => (
+      pub fn $builtin_name(w: &mut Write) -> io::Result<()> {
+        write!(w, $content, $($format_args),*)
+      }
+    );
+  }
+
   use std::io;
   use super::*;
-  pub fn fxadd1(w: &mut Write) -> io::Result<()> {
-    write!(w, "addl ${}, %eax\n", Immed::Fixnum(1).value())
-  }
-  pub fn fxsub1(w: &mut Write) -> io::Result<()> {
-    write!(w, "subl ${}, %eax\n", Immed::Fixnum(1).value())
-  }
+  builtin_fn!(fxadd1, "addl ${}, %eax\n", Immed::Fixnum(1).value());
+  builtin_fn!(fxsub1, "subl ${}, %eax\n", Immed::Fixnum(1).value());
   pub fn char_to_fixnum(w: &mut Write) -> io::Result<()> {
     write!(w, "xor ${}, %eax
       shr ${}, %eax\n", CHAR_TAG, CHAR_SHIFT - FX_SHIFT)
@@ -31,15 +41,14 @@ mod builtins {
       orl ${}, %eax
       ", Immed::Fixnum(0).value(), 0, 6, Immed::Bool(false).value())
   }
-  pub fn is_null(w: &mut Write) -> io::Result<()> {
-    write!(w,
+  builtin_fn!(is_null,
       "cmp ${}, %eax
       mov ${}, %eax
       sete %al
       shl ${}, %eax
       orl ${}, %eax
-      ", Immed::Nil.value(), 0, 6, Immed::Bool(false).value())
-  }
+      ", Immed::Nil.value(), 0, 6, Immed::Bool(false).value());
+
   pub fn not(w: &mut Write) -> io::Result<()> {
     write!(w,
       "cmp ${}, %eax
@@ -60,18 +69,33 @@ mod builtins {
 //  pub fn is_boolean
 }
 
+macro_rules! with_items {
+  ($hashmap: expr) => ($hashmap);
+  ($hashmap: expr, $($item: expr),*,) => (
+    with_items!($hashmap, $($item),*)
+  );
+  ($hashmap: expr, $($item: expr),*) => (
+    {
+     $(
+      let (name, num_args, func) = $item;
+      $hashmap.insert((name, num_args), func as fn(&mut Write) -> io::Result<()>);
+     )*
+    }
+  );
+}
 lazy_static!{
   static ref Builtin: HashMap<(&'static str, usize), fn(&mut Write) -> io::Result<()>> = {
     let mut result = HashMap::new();
-    // first is the name of the function, and the second is the number of arguments
-    result.insert(("fxadd1", 1), builtins::fxadd1 as fn(&mut Write) -> io::Result<()>);
-    result.insert(("fxsub1", 1), builtins::fxsub1 as fn(&mut Write) -> io::Result<()>);
-    result.insert(("char->fixnum", 1), builtins::char_to_fixnum as fn(&mut Write) -> io::Result<()>);
-    result.insert(("fixnum->char", 1), builtins::fixnum_to_char as fn(&mut Write) -> io::Result<()>);
-    result.insert(("fxzero?", 1), builtins::is_fxzero as fn(&mut Write) -> io::Result<()>);
-    result.insert(("null?", 1), builtins::is_null as fn(&mut Write) -> io::Result<()>);
-    result.insert(("not", 1), builtins::not as fn(&mut Write) -> io::Result<()>);
-    result.insert(("fixnum?", 1), builtins::is_fixnum as fn(&mut Write) -> io::Result<()>);
+    with_items!(result,
+      ("fixnum?", 1, builtins::is_fixnum),
+      ("not", 1, builtins::not),
+      ("fxadd1", 1, builtins::fxadd1),
+      ("fxsub1", 1, builtins::fxsub1),
+      ("fxzero?", 1, builtins::is_fxzero),
+      ("null?", 1, builtins::is_null),
+      ("char->fixnum", 1, builtins::char_to_fixnum),
+      ("fixnum->char", 1, builtins::fixnum_to_char),
+    );
     result
   };
 }
