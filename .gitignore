@@ -7,3 +7,5 @@ Cargo.lock
 a.out
 temp_test.s
 *.swo
+exe_*
+tmp*

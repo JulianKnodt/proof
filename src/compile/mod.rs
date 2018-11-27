@@ -3,36 +3,57 @@ pub mod compile;
 #[cfg(test)]
 mod tests {
   use compile::compile;
-  use lisp_parse::Token;
   use std::process::Command;
   use std::fs::File;
   use std::path::Path;
   use std::str;
 
-  fn basic_test_cases() -> Vec<(Token, &'static str)> {
+  fn basic_test_cases() -> Vec<(&'static str, &'static str)> {
     vec!(
-      (Token::from("nil"), "nil"),
-      (Token::from("3"), "3"),
-      (Token::from("-3"), "-3"),
-      (Token::from("0"), "0"),
-      (Token::from("#\\a"), "#\\a"),
-      (Token::from("#\\A"), "#\\A"),
-      (Token::from("#t"), "#t"),
-      (Token::from("#f"), "#f"),
+      ("nil", "nil"),
+      ("()", "nil"),
+      ("3", "3"),
+      ("-3", "-3"),
+      ("0", "0"),
+      ("#\\a", "#\\a"),
+      ("#\\A", "#\\A"),
+      ("#t", "#t"),
+      ("#f", "#f"),
     )
   }
 
-  fn one_arg_test_cases() -> Vec<(Token, &'static str)> {
+  fn first<T>(a: Vec<T>) -> T {
+    a.into_iter().next().unwrap()
+  }
+
+  fn one_arg_test_cases() -> Vec<(&'static str, &'static str)> {
     vec!(
-      (Token::Group(vec!(Token::from("fxadd1"), Token::from("1"))), "2"),
+      ("(fxadd1 1)", "2"),
+      ("(fxadd1 (fxadd1 1))", "3"),
+      ("(fxsub1 (fxsub1 3))", "1"),
+      ("(char->fixnum #\\a)", "97"),
+      ("(char->fixnum #\\A)", "65"),
+      ("(fixnum->char 65)", "#\\A"),
+      ("(fxzero? 0)", "#t"),
+      ("(fxzero? 1)", "#f"),
+      ("(null? 1)", "#f"),
+      ("(null? ())", "#t"),
+      ("(not ())", "#f"),
+      ("(not #f)", "#t"),
+      ("(fixnum? #f)", "#f"),
+      ("(fixnum? 1)", "#t"),
+      ("(fixnum? 0)", "#t"),
     )
   }
 
-  fn run_on(cases: Vec<(Token, &'static str)>, name: &'static str) {
+  fn run_on(cases: Vec<(&'static str, &'static str)>, name: &'static str) {
+    use lisp_parse::parse;
+
     let errors: Vec<String> = cases.into_iter().enumerate().filter_map(|(i, (input, expected))| {
-      let filename = format!("tmp{}_{}t{}.s", name, i, expected);
+      let filename = format!("tmp{}_{}.s", name, i);
       let mut file = File::create(&filename).expect("Cannot open temp file");
-      compile::compile(&input, &mut file).expect("Could not compile");
+      compile::compile(&first(parse(String::from(input))), &mut file)
+        .expect("Could not compile");
       let newfile = format!("exe_{}_{}", name, i);
       let comp_out = Command::new("gcc")
         .arg(format!("{}/runtime_test/runtime.c",
@@ -59,7 +80,7 @@ mod tests {
         if output.trim() == expected.trim() {
           None
         } else {
-          Some(format!("Expected: {}, Got: {}", expected, output))
+          Some(format!("Input({}th): {}, Expected: {}, Got: {}", i, input, expected, output))
         }
       } else {
         panic!("Could not parse result");
