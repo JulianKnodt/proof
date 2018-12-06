@@ -1,4 +1,5 @@
 pub mod compile;
+mod labels;
 
 #[cfg(test)]
 mod tests {
@@ -43,6 +44,23 @@ mod tests {
       ("(fixnum? #f)", "#f"),
       ("(fixnum? 1)", "#t"),
       ("(fixnum? 0)", "#t"),
+      ("(char? 0)", "#f"),
+      ("(char? #\\a)", "#t"),
+      ("(bool? #\\a)", "#f"),
+      ("(bool? #f)", "#t"),
+      ("(bool? #t)", "#t"),
+      ("(fxnot 1)", "-2"),
+    )
+  }
+
+  fn if_test_cases() -> Vec<(&'static str, &'static str)> {
+    vec!(
+      ("(if #t 1 2)", "1"),
+      ("(if #f 1 2)", "2"),
+      ("(fxadd1 (if #t 1 2))", "2"),
+      ("(fxadd1 (if #t (fxadd1 1) 2))", "3"),
+      ("(fxadd1 (if #f (fxadd1 1) (fxadd1 2)))", "4"),
+      ("(fxadd1 (if #\\a (fxadd1 1) (fxadd1 2)))", "4"),
     )
   }
 
@@ -96,6 +114,7 @@ mod tests {
   fn run_tests() {
     run_on(basic_test_cases(), "basic");
     run_on(one_arg_test_cases(), "one_arg");
+    run_on(if_test_cases(), "if");
     // run_on(...)
   }
 }

@@ -4,6 +4,8 @@ use std::io;
 use lisp_parse::Token;
 
 use std::collections::HashMap;
+use compile::labels::{Counter};
+use std::sync::Mutex;
 
 mod builtins {
   macro_rules! builtin_fn {
@@ -24,23 +26,21 @@ mod builtins {
   use super::*;
   builtin_fn!(fxadd1, "addl ${}, %eax\n", Immed::Fixnum(1).value());
   builtin_fn!(fxsub1, "subl ${}, %eax\n", Immed::Fixnum(1).value());
-  pub fn char_to_fixnum(w: &mut Write) -> io::Result<()> {
-    write!(w, "xor ${}, %eax
-      shr ${}, %eax\n", CHAR_TAG, CHAR_SHIFT - FX_SHIFT)
-  }
-  pub fn fixnum_to_char(w: &mut Write) -> io::Result<()> {
-    write!(w, "shl ${}, %eax
-      orl ${}, %eax\n", CHAR_SHIFT - FX_SHIFT, CHAR_TAG)
-  }
-  pub fn is_fxzero(w: &mut Write) -> io::Result<()> {
-    write!(w,
-      "cmp ${}, %eax
-      mov ${}, %eax
-      sete %al
-      shl ${}, %eax
-      orl ${}, %eax
-      ", Immed::Fixnum(0).value(), 0, 6, Immed::Bool(false).value())
-  }
+  builtin_fn!(char_to_fixnum,
+    "xor ${}, %eax
+    shr ${}, %eax
+    ", CHAR_TAG, CHAR_SHIFT - FX_SHIFT);
+  builtin_fn!(fixnum_to_char,
+    "shl ${}, %eax
+    orl ${}, %eax
+    ", CHAR_SHIFT - FX_SHIFT, CHAR_TAG);
+  builtin_fn!(is_fxzero,
+    "cmp ${}, %eax
+    mov ${}, %eax
+    sete %al
+    shl ${}, %eax
+    orl ${}, %eax
+    ", Immed::Fixnum(0).value(), 0, 6, Immed::Bool(false).value());
   builtin_fn!(is_null,
       "cmp ${}, %eax
       mov ${}, %eax
@@ -66,7 +66,24 @@ mod builtins {
       orl ${}, %eax
       ", FX_MASK, Immed::Bool(false).value())
   }
-//  pub fn is_boolean
+  builtin_fn!(is_char,
+    "and ${}, %eax
+    setnz %al
+    shl $6, %eax
+    orl ${}, %eax
+    ", CHAR_TAG, Immed::Bool(false).value());
+
+  builtin_fn!(is_bool,
+    "and ${}, %eax
+    cmp ${}, %eax
+    sete %al
+    shl $6, %eax
+    orl ${}, %eax
+    ", Immed::Bool(false).value(), Immed::Bool(false).value(), Immed::Bool(false).value());
+  builtin_fn!(fxlognot,
+    "not %eax
+    and ${}, %eax
+    ", 0xFFFFFFFCu32);
 }
 
 macro_rules! with_items {
@@ -88,21 +105,28 @@ lazy_static!{
     let mut result = HashMap::new();
     with_items!(result,
       ("fixnum?", 1, builtins::is_fixnum),
+      ("bool?", 1, builtins::is_bool),
+      ("char?", 1, builtins::is_char),
       ("not", 1, builtins::not),
       ("fxadd1", 1, builtins::fxadd1),
       ("fxsub1", 1, builtins::fxsub1),
       ("fxzero?", 1, builtins::is_fxzero),
+      ("fxnot", 1, builtins::fxlognot),
       ("null?", 1, builtins::is_null),
       ("char->fixnum", 1, builtins::char_to_fixnum),
       ("fixnum->char", 1, builtins::fixnum_to_char),
     );
     result
   };
+  static ref unique_label: Mutex<Counter> = {
+    Mutex::new(Counter::new())
+  };
 }
 
 enum Sexp {
   Immed(Immed),
   Expr(String, Vec<Sexp>),
+  If(Box<Sexp>, Box<Sexp>, Box<Sexp>),
   Malformed(String),
 }
 
@@ -122,6 +146,12 @@ impl Sexp {
       },
       Token::Group(g) => match g.as_slice() {
         [] => Sexp::Immed(Immed::Nil),
+        [Token::Word(if_string), cond, pred, alt] if if_string == "if" =>
+          Sexp::If(
+            Box::new(Sexp::type_of(cond)),
+            Box::new(Sexp::type_of(pred)),
+            Box::new(Sexp::type_of(alt)),
+          ),
         [Token::Word(fn_name), args..] =>
           Sexp::Expr(fn_name.to_string(), args.iter().map(|arg| Sexp::type_of(arg)).collect()),
         _ => unimplemented!(), // This is the case where the first arg evals to fn
@@ -139,6 +169,20 @@ impl Sexp {
           Some(func) => func(w),
           None => panic!("No such function {}", fn_name),
         }
+      },
+      Sexp::If(cond, pred, alt) => {
+        let label = unique_label.lock().unwrap().take();
+
+        cond.emit(w)?;
+        write!(w, "cmp ${true_val}, %eax
+        jne alt_{label}
+        ", true_val=Immed::Bool(true).value(), label=label)?;
+        pred.emit(w)?;
+        write!(w, "jmp end_if_{label}
+        alt_{label}:
+        ", label=label)?;
+        alt.emit(w)?;
+        write!(w, "end_if_{}:\n", label)
       },
       Sexp::Malformed(_) => panic!("Emit called on malformed"),
     }
