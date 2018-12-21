@@ -64,6 +64,37 @@ mod tests {
     )
   }
 
+  fn two_arg_test_cases() -> Vec<(&'static str, &'static str)> {
+    vec!(
+      ("(fx+ 1 2)", "3"),
+      ("(fx- 1 2)", "-1"),
+
+      ("(fxlogor #t #t)", "#t"),
+      ("(fxlogor #f #t)", "#t"),
+      ("(fxlogor #t #f)", "#t"),
+      ("(fxlogor #f #f)", "#f"),
+
+      ("(fxlogand #t #t)", "#t"),
+      ("(fxlogand #f #t)", "#f"),
+      ("(fxlogand #t #f)", "#f"),
+      ("(fxlogand #f #f)", "#f"),
+
+      ("(fx+ (fx- (fx- 30 3) 3) (fx- 6 5))", "25"),
+
+      ("(fx= 1 1)", "#t"),
+      ("(fx= 2 1)", "#f"),
+
+      ("(fx> 1 1)", "#f"),
+      ("(fx> 2 1)", "#t"),
+      ("(fx> 0 1)", "#f"),
+
+
+      ("(fx< 1 1)", "#f"),
+      ("(fx< 2 1)", "#f"),
+      ("(fx< 0 1)", "#t"),
+    )
+  }
+
   fn run_on(cases: Vec<(&'static str, &'static str)>, name: &'static str) {
     use lisp_parse::parse;
 
@@ -94,14 +125,10 @@ mod tests {
         }
       };
 
-      if let Ok(output) = str::from_utf8(&result.stdout) {
-        if output.trim() == expected.trim() {
-          None
-        } else {
-          Some(format!("Input({}th): {}, Expected: {}, Got: {}", i, input, expected, output))
-        }
-      } else {
-        panic!("Could not parse result");
+      let output = str::from_utf8(&result.stdout).expect("Could not parse result");
+      if output.trim() == expected.trim() { None }
+      else {
+        Some(format!("Input({}th): {}, Expected: {}, Got: {}", i, input, expected, output))
       }
     }).collect();
     if !errors.is_empty() {
@@ -115,6 +142,7 @@ mod tests {
     run_on(basic_test_cases(), "basic");
     run_on(one_arg_test_cases(), "one_arg");
     run_on(if_test_cases(), "if");
+    run_on(two_arg_test_cases(), "two_arg");
     // run_on(...)
   }
 }
